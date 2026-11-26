@@ -1,8 +1,19 @@
 /* TrustMed Academy — standalone PWA (static, talks directly to Supabase).
    No passwords or secrets are stored here. Only the PUBLIC Supabase URL +
    publishable key (safe for client code, RLS enforces access). */
-const CFG = window.__TRUSTMED_CONFIG__;
-const supabase = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+const CFG = window.__TRUSTMED_CONFIG__ || {};
+/* Defensive init (fix for frozen login page): if the Supabase JS library did
+   not load (CDN blocked/slow) or the config is missing, the old code threw
+   here on line 5 and NO event handler ever attached — every button dead,
+   including the language toggle. Now we fail soft: supabase stays null, the
+   handlers still attach, and the login area shows a clear Arabic error. */
+const SUPABASE_LOAD_ERROR = "تعذر تحميل مكتبة الدخول — تحقق من الاتصال بالإنترنت ثم أعد تحميل الصفحة";
+let supabase = null;
+try {
+  if (!window.supabase || typeof window.supabase.createClient !== "function") throw new Error("supabase library missing");
+  if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) throw new Error("supabase config missing");
+  supabase = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+} catch (e) { console.warn("Supabase init failed:", e.message); supabase = null; }
 
 const I18N = {
   ar: { dashboard:"لوحة التحكم", schedule:"الجدول الرئيسي", group_progress:"تقدم المجموعات", late_groups:"المجموعات المتأخرة", schedules:"الجداول اليومية والأسبوعية", library:"المكتبة", notifications:"الإشعارات", reports:"التقارير", messages:"الرسائل والتنسيق", assistant:"مساعد الذكاء الاصطناعي", users:"المستخدمون وطلبات الدخول", settings:"الإعدادات", logout:"تسجيل الخروج", faculty:"كلية الطب البشري — الدفعة 11" },
@@ -39,6 +50,8 @@ function show(id) {
   window.scrollTo(0, 0);
 }
 function setMsg(el, text, ok) { if (el) { el.textContent = text || ""; el.className = "msg" + (ok ? " ok" : ""); } }
+/* If Supabase failed to initialise, say so visibly instead of a frozen page. */
+if (!supabase) setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
 function canManage() { return state.profile && ["super_admin", "admin"].includes(state.profile.role); }
 function canEditLecture(lec) {
   if (!state.profile) return false;
@@ -109,7 +122,7 @@ async function afterAuth(user) {
   renderAll();
 }
 async function signOut() {
-  await supabase.auth.signOut();
+  if (supabase) await supabase.auth.signOut();
   state.user = null; state.profile = null;
   $("logoutBtn").classList.add("hidden");
   $("mainNav").classList.add("hidden");
@@ -119,6 +132,7 @@ $("logoutBtn").onclick = signOut;
 $("pendingLogoutBtn").onclick = signOut;
 
 $("googleBtn").onclick = async () => {
+  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo: window.location.origin + window.location.pathname }
@@ -126,6 +140,7 @@ $("googleBtn").onclick = async () => {
   if (error) setMsg($("loginMsg"), error.message);
 };
 $("emailLoginBtn").onclick = async () => {
+  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
   const email = $("emailInput").value.trim(), password = $("passwordInput").value;
   if (!email || !password) return setMsg($("loginMsg"), LANG === "ar" ? "أدخل البريد وكلمة السر." : "Enter email and password.");
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -133,6 +148,7 @@ $("emailLoginBtn").onclick = async () => {
   await afterAuth(data.user);
 };
 $("signupBtn").onclick = async () => {
+  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
   const email = $("emailInput").value.trim(), password = $("passwordInput").value;
   if (!email || !password) return setMsg($("loginMsg"), LANG === "ar" ? "أدخل البريد وكلمة السر لإنشاء الحساب." : "Enter email and password to sign up.");
   const { data, error } = await supabase.auth.signUp({ email, password });
@@ -141,7 +157,7 @@ $("signupBtn").onclick = async () => {
   if (data.user) await afterAuth(data.user);
 };
 
-supabase.auth.onAuthStateChange(async (event, session) => {
+if (supabase) supabase.auth.onAuthStateChange(async (event, session) => {
   if (session && session.user && !state.profile) await afterAuth(session.user);
 });
 
@@ -855,7 +871,7 @@ $("saveUrls").onclick = () => {
   applyLang();
   const savedLogo = localStorage.getItem("tm_logo");
   if (savedLogo) $("logoImg").src = savedLogo;
-  const { data } = await supabase.auth.getSession();
+  const { data } = supabase ? await supabase.auth.getSession() : { data: null };
   if (data && data.session && data.session.user) await afterAuth(data.session.user);
   else show("view-login");
 })();
