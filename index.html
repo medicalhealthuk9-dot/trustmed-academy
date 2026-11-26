@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TRUST IN MED — TrustMed Academy</title>
+<meta name="description" content="TRUST IN MED — نظام الإدارة الأكاديمية والجداول والمحاضرات والتقارير — كلية الطب البشري">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f3c6e">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img id="logoImg" src="icon.svg" alt="TRUST IN MED" class="logo">
+    <div>
+      <div class="brand-name">TRUST IN MED</div>
+      <div class="brand-sub" data-i18n="faculty">كلية الطب البشري — الدفعة 11</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="langBtn" class="btn ghost" type="button">English</button>
+    <button id="logoutBtn" class="btn ghost hidden" type="button" data-i18n="logout">تسجيل الخروج</button>
+  </div>
+</header>
+
+<nav id="mainNav" class="nav hidden"></nav>
+
+<main id="app">
+  <!-- Login view -->
+  <section id="view-login" class="view">
+    <div class="card login-card">
+      <h1>TRUST IN MED</h1>
+      <p class="muted" data-i18n="login_sub">نظام الإدارة الأكاديمية والجداول والمحاضرات والتقارير</p>
+      <button id="googleBtn" class="btn google" type="button">الدخول بحساب Google</button>
+      <div class="divider"><span>أو</span></div>
+      <label data-i18n="email">البريد الإلكتروني</label>
+      <input id="emailInput" type="email" autocomplete="email" placeholder="name@example.com" dir="ltr">
+      <label data-i18n="password">كلمة السر</label>
+      <input id="passwordInput" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button id="emailLoginBtn" class="btn primary" type="button" data-i18n="login">تسجيل الدخول</button>
+      <button id="signupBtn" class="btn ghost" type="button" data-i18n="create_account">إنشاء حساب جديد</button>
+      <p id="loginMsg" class="msg"></p>
+      <p class="muted small" data-i18n="first_admin_note">أول Super Admin: سجّل بحساب جديد ثم اطلب من المشرف تعيين دورك، أو عيّن الدور من Supabase (انظر README).</p>
+    </div>
+  </section>
+
+  <!-- Pending approval view -->
+  <section id="view-pending" class="view hidden">
+    <div class="card login-card">
+      <h1 data-i18n="pending_title">طلبك قيد المراجعة</h1>
+      <p data-i18n="pending_body">تم استلام طلب دخولك. لن تتمكن من الوصول إلى بيانات المنصة حتى يوافق Super Admin على طلبك ويحدد دورك ومجموعتك. ستتلقى إشعاراً عند القبول.</p>
+      <p class="muted small"><span data-i18n="pending_email">البريد</span>: <b id="pendingEmail"></b></p>
+      <button id="pendingLogoutBtn" class="btn ghost" type="button" data-i18n="logout">تسجيل الخروج</button>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <section id="view-dashboard" class="view hidden">
+    <h2 data-i18n="dashboard">لوحة التحكم</h2>
+    <div id="dashStats" class="grid"></div>
+    <div class="card"><h3 data-i18n="subject_progress">تقدم المواد</h3><div id="subjectProgress"></div></div>
+    <div class="card"><h3 data-i18n="group_comparison">مقارنة المجموعات</h3><div id="groupComparison" class="table-wrap"></div></div>
+  </section>
+
+  <!-- Schedule -->
+  <section id="view-schedule" class="view hidden">
+    <h2 data-i18n="schedule">الجدول الرئيسي</h2>
+    <div class="card">
+      <div class="filters">
+        <select id="fGroup"></select>
+        <select id="fSubject"></select>
+        <select id="fStatus">
+          <option value="" data-i18n="all_status">كل الحالات</option>
+          <option value="not_taken" data-i18n="not_taken">لم تُؤخذ</option>
+          <option value="completed" data-i18n="completed">مكتملة</option>
+          <option value="postponed" data-i18n="postponed">مؤجلة</option>
+          <option value="cancelled" data-i18n="cancelled">ملغاة</option>
+        </select>
+        <input id="fDate" type="date">
+        <button id="fApply" class="btn primary" type="button" data-i18n="filter">تصفية</button>
+      </div>
+      <div id="lectureList" class="table-wrap"></div>
+    </div>
+    <div class="card" id="lectureFormCard">
+      <h3 data-i18n="add_lecture">إضافة محاضرة</h3>
+      <form id="lectureForm" class="form-grid">
+        <label><span data-i18n="subject">المادة</span><select id="lecSubject" required></select></label>
+        <label><span data-i18n="group">المجموعة</span><select id="lecGroup" required></select></label>
+        <label><span data-i18n="lecture_number">رقم المحاضرة</span><input id="lecNumber" type="number" min="1" required></label>
+        <label><span data-i18n="lecture_type">نوع المحاضرة</span>
+          <select id="lecType" required>
+            <option value="theory" data-i18n="theory">نظري</option>
+            <option value="practical" data-i18n="practical">عملي</option>
+            <option value="lab" data-i18n="lab">معمل</option>
+            <option value="clinical" data-i18n="clinical">سريري</option>
+          </select></label>
+        <label><span data-i18n="title">عنوان المحاضرة</span><input id="lecTitle" required></label>
+        <label><span data-i18n="date">التاريخ</span><input id="lecDate" type="date" required></label>
+        <label><span data-i18n="start">وقت البداية</span><input id="lecStart" type="time" required></label>
+        <label><span data-i18n="end">وقت النهاية</span><input id="lecEnd" type="time" required></label>
+        <label><span data-i18n="doctor">الدكتور</span><select id="lecDoctor"><option value="">—</option></select></label>
+        <label><span data-i18n="room">القاعة</span><select id="lecRoom"><option value="">—</option></select></label>
+        <label><span data-i18n="status">الحالة</span>
+          <select id="lecStatus">
+            <option value="not_taken" data-i18n="not_taken">لم تُؤخذ</option>
+            <option value="completed" data-i18n="completed">مكتملة</option>
+            <option value="postponed" data-i18n="postponed">مؤجلة</option>
+            <option value="cancelled" data-i18n="cancelled">ملغاة</option>
+          </select></label>
+        <label class="wide"><span data-i18n="notes">ملاحظات</span><input id="lecNotes"></label>
+        <input type="hidden" id="lecId">
+        <div class="wide">
+          <button class="btn primary" type="submit" data-i18n="save">حفظ</button>
+          <button class="btn ghost" type="button" id="lecCancel" data-i18n="cancel">إلغاء</button>
+          <span id="lecMsg" class="msg"></span>
+        </div>
+      </form>
+      <h4 data-i18n="quick_entry">إدخال سريع لمجموعات متعددة</h4>
+      <p class="muted small" data-i18n="quick_entry_hint">اختر عدة مجموعات لإنشاء محاضرة مستقلة لكل مجموعة بنفس المادة والرقم والتاريخ.</p>
+      <div id="quickGroups" class="chips"></div>
+      <button id="quickBtn" class="btn primary" type="button" data-i18n="quick_add">إضافة للمجموعات المحددة</button>
+      <span id="quickMsg" class="msg"></span>
+    </div>
+  </section>
+
+  <!-- Progress -->
+  <section id="view-progress" class="view hidden">
+    <h2 data-i18n="group_progress">تقدم المجموعات</h2>
+    <div class="card"><label><span data-i18n="group">المجموعة</span><select id="progGroup"></select></label></div>
+    <div class="card"><h3 id="progTitle"></h3><div id="progTable" class="table-wrap"></div></div>
+    <div class="card"><h3 data-i18n="all_groups">كل المجموعات</h3><div id="progAll" class="table-wrap"></div></div>
+  </section>
+
+  <!-- Late groups -->
+  <section id="view-late" class="view hidden">
+    <h2 data-i18n="late_groups">المجموعات المتأخرة</h2>
+    <p class="muted" data-i18n="late_hint">كل مجموعة ناقصها محاضرات، مع المادة والعدد والأرقام الناقصة بالضبط.</p>
+    <div id="lateList"></div>
+  </section>
+
+  <!-- Daily / weekly schedules -->
+  <section id="view-schedules" class="view hidden">
+    <h2 data-i18n="schedules">الجداول اليومية والأسبوعية</h2>
+    <div class="card">
+      <h3 data-i18n="publish_daily">نشر جدول يومي</h3>
+      <form id="dailyForm" class="form-grid">
+        <label><span data-i18n="date">التاريخ</span><input id="dailyDate" type="date" required></label>
+        <label><span data-i18n="group">المجموعة</span><select id="dailyGroup"><option value="">كل المجموعات</option></select></label>
+        <label><span data-i18n="title">العنوان</span><input id="dailyTitle" required></label>
+        <label class="wide"><span data-i18n="notes">ملاحظات</span><input id="dailyNotes"></label>
+        <div class="wide"><button class="btn primary" type="submit" data-i18n="publish">نشر</button> <span id="dailyMsg" class="msg"></span></div>
+      </form>
+    </div>
+    <div class="card"><h3 data-i18n="daily_list">الجداول اليومية</h3><div id="dailyList" class="table-wrap"></div></div>
+    <div class="card">
+      <h3 data-i18n="publish_weekly">نشر جدول أسبوعي</h3>
+      <form id="weeklyForm" class="form-grid">
+        <label><span data-i18n="week_start">بداية الأسبوع</span><input id="weeklyStart" type="date" required></label>
+        <label><span data-i18n="week_end">نهاية الأسبوع</span><input id="weeklyEnd" type="date" required></label>
+        <label><span data-i18n="group">المجموعة</span><select id="weeklyGroup"><option value="">كل المجموعات</option></select></label>
+        <label><span data-i18n="title">العنوان</span><input id="weeklyTitle" required></label>
+        <div class="wide"><button class="btn primary" type="submit" data-i18n="publish">نشر</button> <span id="weeklyMsg" class="msg"></span></div>
+      </form>
+    </div>
+    <div class="card"><h3 data-i18n="weekly_list">الجداول الأسبوعية</h3><div id="weeklyList" class="table-wrap"></div></div>
+  </section>
+
+  <!-- Library -->
+  <section id="view-library" class="view hidden">
+    <h2 data-i18n="library">المكتبة</h2>
+    <div class="card"><h3 data-i18n="lecture_files">ملفات المحاضرات</h3>
+      <div id="fileList" class="table-wrap"></div>
+      <div id="uploadBox">
+        <label><span data-i18n="upload_file">رفع ملف</span><input id="fileInput" type="file"></label>
+        <label><span data-i18n="subject">المادة</span><select id="fileSubject"></select></label>
+        <button id="uploadBtn" class="btn primary" type="button" data-i18n="upload">رفع</button>
+        <span id="uploadMsg" class="msg"></span>
+      </div>
+    </div>
+    <div class="card"><h3 data-i18n="references">المراجع العلمية (Google Drive)</h3>
+      <p id="refNote" class="muted small"></p>
+      <div class="filters">
+        <select id="refSubject"><option value="" data-i18n="all_subjects">كل المواد</option></select>
+        <input id="refSearch" placeholder="بحث بالعنوان أو المؤلف">
+        <button id="refSearchBtn" class="btn primary" type="button" data-i18n="search">بحث</button>
+      </div>
+      <div id="refList"></div>
+      <div id="refFormBox">
+        <h4 data-i18n="add_reference">إضافة مرجع</h4>
+        <form id="refForm" class="form-grid">
+          <label><span data-i18n="title">العنوان</span><input id="refTitle" required></label>
+          <label><span data-i18n="subject">المادة</span><select id="refSubjectAdd" required></select></label>
+          <label><span data-i18n="author">المؤلف</span><input id="refAuthor"></label>
+          <label><span data-i18n="year">سنة النشر</span><input id="refYear" type="number"></label>
+          <label class="wide"><span>Google Drive link</span><input id="refUrl" required dir="ltr" placeholder="https://drive.google.com/file/d/.../view"></label>
+          <div class="wide"><button class="btn primary" type="submit" data-i18n="save">حفظ</button> <span id="refMsg" class="msg"></span></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Notifications -->
+  <section id="view-notifications" class="view hidden">
+    <h2 data-i18n="notifications">الإشعارات</h2>
+    <div class="card"><button id="markAllRead" class="btn ghost" type="button" data-i18n="mark_all_read">تعليم الكل كمقروء</button>
+    <div id="notifList"></div></div>
+  </section>
+
+  <!-- Reports -->
+  <section id="view-reports" class="view hidden">
+    <h2 data-i18n="reports">التقارير</h2>
+    <div class="card">
+      <form id="reportForm" class="form-grid">
+        <label><span data-i18n="report_type">نوع التقرير</span>
+          <select id="repKind">
+            <option value="group" data-i18n="rep_group">تقرير مجموعة</option>
+            <option value="all_groups" data-i18n="rep_all">تقرير كل المجموعات</option>
+            <option value="subject" data-i18n="rep_subject">تقرير مادة</option>
+            <option value="comparison" data-i18n="rep_comp">مقارنة المجموعات</option>
+            <option value="audit" data-i18n="rep_audit">تقرير التدقيق</option>
+          </select></label>
+        <label><span data-i18n="group">المجموعة</span><select id="repGroup"></select></label>
+        <label><span data-i18n="subject">المادة</span><select id="repSubject"></select></label>
+        <div class="wide"><button class="btn primary" type="submit" data-i18n="generate">توليد التقرير</button>
+        <button id="printBtn" class="btn ghost" type="button" data-i18n="print_pdf">طباعة / حفظ PDF</button></div>
+      </form>
+    </div>
+    <div id="reportOut" class="card print-area"></div>
+  </section>
+
+  <!-- Messaging -->
+  <section id="view-messages" class="view hidden">
+    <h2 data-i18n="messages">الرسائل والتنسيق</h2>
+    <p id="msgNote" class="muted small"></p>
+    <div class="msg-layout">
+      <div class="card"><h3 data-i18n="conversations">المحادثات</h3><div id="convList"></div></div>
+      <div class="card"><h3 id="convTitle">—</h3><div id="msgThread" class="thread"></div>
+        <form id="msgForm" class="form-grid">
+          <label class="wide"><span data-i18n="message">رسالة</span><input id="msgText" required></label>
+          <div class="wide"><button class="btn primary" type="submit" data-i18n="send">إرسال</button></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI assistant -->
+  <section id="view-assistant" class="view hidden">
+    <h2 data-i18n="assistant">مساعد الذكاء الاصطناعي</h2>
+    <p class="muted" data-i18n="assistant_hint">يجيب من بيانات المنصة الحقيقية فقط، حسب دورك ومجموعتك.</p>
+    <div class="card"><div id="aiThread" class="thread"></div>
+      <form id="aiForm" class="form-grid">
+        <label class="wide"><span data-i18n="ask">اسأل</span><input id="aiInput" placeholder="ما هي محاضراتي غداً؟" required></label>
+        <div class="wide"><button class="btn primary" type="submit" data-i18n="send">إرسال</button>
+        <button id="aiClear" class="btn ghost" type="button" data-i18n="clear_history">مسح السجل</button></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Users (admin) -->
+  <section id="view-users" class="view hidden">
+    <h2 data-i18n="users">المستخدمون وطلبات الدخول</h2>
+    <div class="card"><h3 data-i18n="pending_requests">طلبات الدخول المعلقة</h3><div id="pendingList"></div></div>
+    <div class="card"><h3 data-i18n="all_users">كل المستخدمين</h3><div id="userList" class="table-wrap"></div></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="view-settings" class="view hidden">
+    <h2 data-i18n="settings">الإعدادات</h2>
+    <div class="card"><h3 data-i18n="connection">حالة الاتصال بـ Supabase</h3><div id="connStatus"></div></div>
+    <div class="card"><h3 data-i18n="logo">شعار المنصة</h3>
+      <input id="logoInput" type="file" accept="image/*">
+      <button id="logoSave" class="btn primary" type="button" data-i18n="save">حفظ</button>
+      <button id="logoRemove" class="btn ghost" type="button" data-i18n="remove">إزالة</button>
+      <p class="muted small" data-i18n="logo_note">يُحفظ الشعار في متصفحك فقط لعرضه في الترويسة والتقارير.</p></div>
+    <div class="card"><h3>Google OAuth</h3>
+      <p class="muted small" data-i18n="oauth_note">لنشر تطبيق Google OAuth للجميع تحتاج رابط الصفحة الرئيسية ورابط سياسة الخصوصية للمنصة بعد نشرها على Vercel. أدخلهما هنا ليُحفظا للرجوع إليهما.</p>
+      <label><span data-i18n="homepage_url">رابط الصفحة الرئيسية</span><input id="homeUrl" dir="ltr" placeholder="https://...vercel.app"></label>
+      <label><span data-i18n="privacy_url">رابط سياسة الخصوصية</span><input id="privacyUrl" dir="ltr" placeholder="https://.../privacy"></label>
+      <button id="saveUrls" class="btn primary" type="button" data-i18n="save">حفظ</button>
+      <span id="urlMsg" class="msg"></span></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>TRUST IN MED — Faculty of Human Medicine</span>
+  <a href="https://t.me/Trustin_Med" target="_blank" rel="noopener">Telegram: t.me/Trustin_Med</a>
+</footer>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  }
+</script>
+</body>
+</html>
