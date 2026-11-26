@@ -8,9 +8,9 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f3c6e">
 <link rel="icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=5">
-<script src="vendor/supabase.min.js?v=5"></script>
-<script src="config.js?v=5"></script>
+<link rel="stylesheet" href="styles.css?v=6">
+<script src="vendor/supabase.min.js?v=6"></script>
+<script src="config.js?v=6"></script>
 </head>
 <body>
 <header class="topbar">
@@ -35,8 +35,8 @@
     <div class="card login-card">
       <h1>TRUST IN MED</h1>
       <p class="muted" data-i18n="login_sub">نظام الإدارة الأكاديمية والجداول والمحاضرات والتقارير</p>
-      <button id="googleBtn" class="btn google" type="button">الدخول بحساب Google</button>
-      <div class="divider"><span>أو</span></div>
+      <button id="googleBtn" class="btn google" type="button" data-i18n="google_signin">الدخول بحساب Google</button>
+      <div class="divider"><span data-i18n="or_divider">أو</span></div>
       <label data-i18n="email">البريد الإلكتروني</label>
       <input id="emailInput" type="email" autocomplete="email" placeholder="name@example.com" dir="ltr">
       <label data-i18n="password">كلمة السر</label>
@@ -290,7 +290,7 @@
   <a href="https://t.me/Trustin_Med" target="_blank" rel="noopener">Telegram: t.me/Trustin_Med</a>
 </footer>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
