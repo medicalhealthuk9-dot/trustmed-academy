@@ -1,5 +1,5 @@
 /* TrustMed Academy PWA service worker — cache-first for app shell, network for API. */
-const CACHE = "trustmed-v2";
+const CACHE = "trustmed-v3";
 const SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./config.js", "./vendor/supabase.min.js", "./manifest.json", "./icon.svg"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
