@@ -5,15 +5,15 @@ const CFG = window.__TRUSTMED_CONFIG__ || {};
 /* Defensive init (fix for frozen login page): if the Supabase JS library did
    not load (CDN blocked/slow) or the config is missing, the old code threw
    here on line 5 and NO event handler ever attached — every button dead,
-   including the language toggle. Now we fail soft: supabase stays null, the
+   including the language toggle. Now we fail soft: sb stays null, the
    handlers still attach, and the login area shows a clear Arabic error. */
 const SUPABASE_LOAD_ERROR = "تعذر تحميل مكتبة الدخول — تحقق من الاتصال بالإنترنت ثم أعد تحميل الصفحة";
-let supabase = null;
+let sb = null;
 try {
-  if (!window.supabase || typeof window.supabase.createClient !== "function") throw new Error("supabase library missing");
-  if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) throw new Error("supabase config missing");
-  supabase = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
-} catch (e) { console.warn("Supabase init failed:", e.message); supabase = null; }
+  if (!window.supabase || typeof window.supabase.createClient !== "function") throw new Error("sb library missing");
+  if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) throw new Error("sb config missing");
+  sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+} catch (e) { console.warn("Supabase init failed:", e.message); sb = null; }
 
 const I18N = {
   ar: { dashboard:"لوحة التحكم", schedule:"الجدول الرئيسي", group_progress:"تقدم المجموعات", late_groups:"المجموعات المتأخرة", schedules:"الجداول اليومية والأسبوعية", library:"المكتبة", notifications:"الإشعارات", reports:"التقارير", messages:"الرسائل والتنسيق", assistant:"مساعد الذكاء الاصطناعي", users:"المستخدمون وطلبات الدخول", settings:"الإعدادات", logout:"تسجيل الخروج", faculty:"كلية الطب البشري — الدفعة 11" },
@@ -51,7 +51,7 @@ function show(id) {
 }
 function setMsg(el, text, ok) { if (el) { el.textContent = text || ""; el.className = "msg" + (ok ? " ok" : ""); } }
 /* If Supabase failed to initialise, say so visibly instead of a frozen page. */
-if (!supabase) setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
+if (!sb) setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
 function canManage() { return state.profile && ["super_admin", "admin"].includes(state.profile.role); }
 function canEditLecture(lec) {
   if (!state.profile) return false;
@@ -88,7 +88,7 @@ $("langBtn").onclick = () => { LANG = LANG === "ar" ? "en" : "ar"; applyLang(); 
 
 /* ---------- Auth ---------- */
 async function loadProfile(user) {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  const { data, error } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   if (error) { console.warn("profile load", error.message); return null; }
   return data;
 }
@@ -122,7 +122,7 @@ async function afterAuth(user) {
   renderAll();
 }
 async function signOut() {
-  if (supabase) await supabase.auth.signOut();
+  if (sb) await sb.auth.signOut();
   state.user = null; state.profile = null;
   $("logoutBtn").classList.add("hidden");
   $("mainNav").classList.add("hidden");
@@ -132,48 +132,48 @@ $("logoutBtn").onclick = signOut;
 $("pendingLogoutBtn").onclick = signOut;
 
 $("googleBtn").onclick = async () => {
-  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
-  const { error } = await supabase.auth.signInWithOAuth({
+  if (!sb) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
+  const { error } = await sb.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo: window.location.origin + window.location.pathname }
   });
   if (error) setMsg($("loginMsg"), error.message);
 };
 $("emailLoginBtn").onclick = async () => {
-  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
+  if (!sb) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
   const email = $("emailInput").value.trim(), password = $("passwordInput").value;
   if (!email || !password) return setMsg($("loginMsg"), LANG === "ar" ? "أدخل البريد وكلمة السر." : "Enter email and password.");
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return setMsg($("loginMsg"), error.message);
   await afterAuth(data.user);
 };
 $("signupBtn").onclick = async () => {
-  if (!supabase) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
+  if (!sb) return setMsg($("loginMsg"), SUPABASE_LOAD_ERROR);
   const email = $("emailInput").value.trim(), password = $("passwordInput").value;
   if (!email || !password) return setMsg($("loginMsg"), LANG === "ar" ? "أدخل البريد وكلمة السر لإنشاء الحساب." : "Enter email and password to sign up.");
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password });
   if (error) return setMsg($("loginMsg"), error.message);
   setMsg($("loginMsg"), LANG === "ar" ? "تم إنشاء الحساب — أكمل الدخول وسيظهر طلبك قيد المراجعة حتى يوافق المشرف." : "Account created — sign in; your request will be pending until an admin approves it.", true);
   if (data.user) await afterAuth(data.user);
 };
 
-if (supabase) supabase.auth.onAuthStateChange(async (event, session) => {
+if (sb) sb.auth.onAuthStateChange(async (event, session) => {
   if (session && session.user && !state.profile) await afterAuth(session.user);
 });
 
 /* ---------- Data loading ---------- */
 async function probeTable(name) {
-  const { error } = await supabase.from(name).select("id").limit(1);
+  const { error } = await sb.from(name).select("id").limit(1);
   return !error;
 }
 async function loadData() {
   const [b, g, s, d, r, l] = await Promise.all([
-    supabase.from("batches").select("*").eq("is_active", true).limit(1).maybeSingle(),
-    supabase.from("groups").select("*").order("number"),
-    supabase.from("subjects").select("*").order("code"),
-    supabase.from("doctors").select("*").order("full_name"),
-    supabase.from("rooms").select("*").order("name"),
-    supabase.from("lectures").select("*").order("lecture_date").order("start_time")
+    sb.from("batches").select("*").eq("is_active", true).limit(1).maybeSingle(),
+    sb.from("groups").select("*").order("number"),
+    sb.from("subjects").select("*").order("code"),
+    sb.from("doctors").select("*").order("full_name"),
+    sb.from("rooms").select("*").order("name"),
+    sb.from("lectures").select("*").order("lecture_date").order("start_time")
   ]);
   state.batch = b.data || null;
   state.groups = g.data || [];
@@ -190,31 +190,31 @@ async function loadData() {
   await loadFiles();
   if (state.tables.references) await loadRefs();
   if (state.tables.weekly) {
-    const { data } = await supabase.from("weekly_schedules").select("*").order("created_at", { ascending: false }).limit(50);
+    const { data } = await sb.from("weekly_schedules").select("*").order("created_at", { ascending: false }).limit(50);
     state.weekly = data || [];
   }
   if (state.tables.daily) {
-    const { data } = await supabase.from("daily_schedules").select("*").order("created_at", { ascending: false }).limit(50);
+    const { data } = await sb.from("daily_schedules").select("*").order("created_at", { ascending: false }).limit(50);
     state.daily = data || [];
   }
 }
 async function loadNotifications() {
   if (!state.user) return;
-  let q = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
+  let q = sb.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
   if (!canManage()) q = q.eq("user_id", state.user.id);
   const { data } = await q;
   state.notifications = data || [];
 }
 async function loadFiles() {
-  const { data } = await supabase.from("lecture_files").select("*").order("created_at", { ascending: false }).limit(100);
+  const { data } = await sb.from("lecture_files").select("*").order("created_at", { ascending: false }).limit(100);
   state.files = data || [];
 }
 async function loadRefs() {
-  const { data } = await supabase.from("scientific_references").select("*").order("created_at", { ascending: false }).limit(200);
+  const { data } = await sb.from("scientific_references").select("*").order("created_at", { ascending: false }).limit(200);
   state.refs = data || [];
 }
 function refreshLectures() {
-  return supabase.from("lectures").select("*").order("lecture_date").order("start_time")
+  return sb.from("lectures").select("*").order("lecture_date").order("start_time")
     .then(({ data }) => { state.lectures = data || []; });
 }
 
@@ -358,13 +358,13 @@ async function createLectureRow(row) {
     l.lecture_number === row.lecture_number && l.status === "completed");
   if (dup) throw new Error(LANG === "ar" ? "رقم المحاضرة مكرر: هذه المحاضرة مأخوذة أصلاً في نفس المادة والمجموعة." : "Duplicate lecture number for this subject and group.");
   const payload = { ...row, batch_id: state.batch ? state.batch.id : null, duration_minutes: 90, created_by: state.user ? state.user.id : null };
-  const { data, error } = await supabase.from("lectures").insert(payload).select().single();
+  const { data, error } = await sb.from("lectures").insert(payload).select().single();
   if (error) {
     if (String(error.code) === "23505" || /duplicate/i.test(error.message)) throw new Error(LANG === "ar" ? "رقم المحاضرة مكرر: هذه المحاضرة مأخوذة أصلاً في نفس المادة والمجموعة." : "Duplicate lecture number for this subject and group.");
     throw new Error(error.message);
   }
   // Verify the row is actually readable in Supabase (mirror check).
-  const { data: check } = await supabase.from("lectures").select("id").eq("id", data.id).maybeSingle();
+  const { data: check } = await sb.from("lectures").select("id").eq("id", data.id).maybeSingle();
   if (!check) throw new Error("SUPABASE_WRITE_FAILED");
   state.lectures.push(data);
   return data;
@@ -383,7 +383,7 @@ $("lectureForm").onsubmit = async (e) => {
   try {
     if (id) {
       if (row.end_time <= row.start_time) throw new Error(LANG === "ar" ? "وقت النهاية يجب أن يكون بعد وقت البداية." : "End time must be after start time.");
-      const { error } = await supabase.from("lectures").update({ ...row, updated_by: state.user.id }).eq("id", id);
+      const { error } = await sb.from("lectures").update({ ...row, updated_by: state.user.id }).eq("id", id);
       if (error) throw new Error(error.message);
       await refreshLectures();
       setMsg($("lecMsg"), LANG === "ar" ? "تم التعديل بنجاح." : "Updated.", true);
@@ -409,14 +409,14 @@ window.editLecture = (id) => {
 };
 window.deleteLecture = async (id) => {
   if (!confirm(LANG === "ar" ? "هل أنت متأكد من حذف هذه المحاضرة؟" : "Delete this lecture?")) return;
-  const { error } = await supabase.from("lectures").delete().eq("id", id);
+  const { error } = await sb.from("lectures").delete().eq("id", id);
   if (error) return alert(error.message);
   // Verify the row is gone in Supabase (live re-read, retry once).
   let gone = false;
   for (let i = 0; i < 2 && !gone; i++) {
-    const { data } = await supabase.from("lectures").select("id").eq("id", id).maybeSingle();
+    const { data } = await sb.from("lectures").select("id").eq("id", id).maybeSingle();
     gone = !data;
-    if (!gone) await supabase.from("lectures").delete().eq("id", id);
+    if (!gone) await sb.from("lectures").delete().eq("id", id);
   }
   if (!gone) return alert(LANG === "ar" ? "فشل حذف المحاضرة من Supabase — أعد المحاولة." : "Could not delete the lecture from Supabase — retry.");
   await refreshLectures(); renderAll();
@@ -444,9 +444,9 @@ $("quickBtn").onclick = async () => {
 async function notifyGroup(groupId, title, body) {
   if (!state.user) return;
   try {
-    const { data: users } = await supabase.from("profiles").select("id").eq("group_id", groupId);
+    const { data: users } = await sb.from("profiles").select("id").eq("group_id", groupId);
     const rows = (users || []).map((u) => ({ user_id: u.id, group_id: groupId, batch_id: state.batch ? state.batch.id : null, title, body, kind: "lecture_new" }));
-    if (rows.length) await supabase.from("notifications").insert(rows);
+    if (rows.length) await sb.from("notifications").insert(rows);
   } catch (e) { console.warn("notify", e.message); }
 }
 
@@ -536,7 +536,7 @@ $("dailyForm").onsubmit = async (e) => {
   e.preventDefault();
   if (!state.tables.daily) return setMsg($("dailyMsg"), LANG === "ar" ? "جدول daily_schedules غير موجود — شغّل sql/missing_tables.sql أولاً." : "daily_schedules table is missing — run sql/missing_tables.sql first.");
   const row = { date: $("dailyDate").value, group_id: $("dailyGroup").value || null, title: $("dailyTitle").value.trim(), notes: $("dailyNotes").value.trim() || null, batch_id: state.batch ? state.batch.id : null, lecture_count: 0, published_by: state.user.id };
-  const { error } = await supabase.from("daily_schedules").insert(row);
+  const { error } = await sb.from("daily_schedules").insert(row);
   if (error) return setMsg($("dailyMsg"), error.message);
   setMsg($("dailyMsg"), LANG === "ar" ? "تم نشر الجدول اليومي." : "Daily schedule published.", true);
   await loadData(); renderAll();
@@ -545,7 +545,7 @@ $("weeklyForm").onsubmit = async (e) => {
   e.preventDefault();
   if (!state.tables.weekly) return setMsg($("weeklyMsg"), LANG === "ar" ? "جدول weekly_schedules غير موجود — شغّل sql/missing_tables.sql أولاً." : "weekly_schedules table is missing — run sql/missing_tables.sql first.");
   const row = { week_start: $("weeklyStart").value, week_end: $("weeklyEnd").value, group_id: $("weeklyGroup").value || null, title: $("weeklyTitle").value.trim(), batch_id: state.batch ? state.batch.id : null, lecture_count: 0, published_by: state.user.id };
-  const { error } = await supabase.from("weekly_schedules").insert(row);
+  const { error } = await sb.from("weekly_schedules").insert(row);
   if (error) return setMsg($("weeklyMsg"), error.message);
   setMsg($("weeklyMsg"), LANG === "ar" ? "تم نشر الجدول الأسبوعي." : "Weekly schedule published.", true);
   await loadData(); renderAll();
@@ -554,14 +554,14 @@ window.editSchedule = async (kind, id) => {
   const title = prompt(LANG === "ar" ? "العنوان الجديد:" : "New title:");
   if (!title) return;
   const table = kind === "daily" ? "daily_schedules" : "weekly_schedules";
-  const { error } = await supabase.from(table).update({ title }).eq("id", id);
+  const { error } = await sb.from(table).update({ title }).eq("id", id);
   if (error) return alert(error.message);
   await loadData(); renderAll();
 };
 window.deleteSchedule = async (kind, id) => {
   if (!confirm(LANG === "ar" ? "حذف هذا الجدول؟" : "Delete this schedule?")) return;
   const table = kind === "daily" ? "daily_schedules" : "weekly_schedules";
-  const { error } = await supabase.from(table).delete().eq("id", id);
+  const { error } = await sb.from(table).delete().eq("id", id);
   if (error) return alert(error.message);
   await loadData(); renderAll();
 };
@@ -604,7 +604,7 @@ function renderLibrary() {
 }
 window.downloadFile = async (path) => {
   if (!path) return alert(LANG === "ar" ? "لا يوجد مسار للملف." : "No file path.");
-  const { data, error } = await supabase.storage.from("lecture-files").createSignedUrl(path, 3600);
+  const { data, error } = await sb.storage.from("lecture-files").createSignedUrl(path, 3600);
   if (error || !data) return alert(error ? error.message : "—");
   window.open(data.signedUrl, "_blank");
 };
@@ -612,9 +612,9 @@ $("uploadBtn").onclick = async () => {
   const file = $("fileInput").files[0];
   if (!file) return setMsg($("uploadMsg"), LANG === "ar" ? "اختر ملفاً أولاً." : "Choose a file first.");
   const path = `${state.batch ? state.batch.code : "B11"}/${Date.now()}_${file.name}`;
-  const { error: upErr } = await supabase.storage.from("lecture-files").upload(path, file);
+  const { error: upErr } = await sb.storage.from("lecture-files").upload(path, file);
   if (upErr) return setMsg($("uploadMsg"), upErr.message);
-  const { error } = await supabase.from("lecture_files").insert({
+  const { error } = await sb.from("lecture_files").insert({
     title: file.name, storage_path: path, file_type: file.type, file_size: file.size,
     subject_id: $("fileSubject").value || null, batch_id: state.batch ? state.batch.id : null,
     uploaded_by: state.user.id
@@ -628,7 +628,7 @@ $("refForm").onsubmit = async (e) => {
   e.preventDefault();
   const url = $("refUrl").value.trim();
   if (!driveUrls(url)) return setMsg($("refMsg"), LANG === "ar" ? "رابط Google Drive غير صالح." : "Invalid Google Drive link.");
-  const { error } = await supabase.from("scientific_references").insert({
+  const { error } = await sb.from("scientific_references").insert({
     title: $("refTitle").value.trim(), subject_id: $("refSubjectAdd").value,
     author: $("refAuthor").value.trim() || null, year: $("refYear").value ? parseInt($("refYear").value, 10) : null,
     drive_url: url, batch_id: state.batch ? state.batch.id : null, created_by: state.user.id
@@ -639,7 +639,7 @@ $("refForm").onsubmit = async (e) => {
 };
 window.deleteRef = async (id) => {
   if (!confirm(LANG === "ar" ? "حذف هذا المرجع؟" : "Delete this reference?")) return;
-  const { error } = await supabase.from("scientific_references").delete().eq("id", id);
+  const { error } = await sb.from("scientific_references").delete().eq("id", id);
   if (error) return alert(error.message);
   await loadRefs(); renderLibrary();
 };
@@ -653,11 +653,11 @@ function renderNotifications() {
     : `<p class="muted">${LANG === "ar" ? "لا توجد إشعارات." : "No notifications."}</p>`;
 }
 window.markRead = async (id) => {
-  await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+  await sb.from("notifications").update({ is_read: true }).eq("id", id);
   await loadNotifications(); renderNotifications();
 };
 $("markAllRead").onclick = async () => {
-  await supabase.from("notifications").update({ is_read: true }).eq("user_id", state.user.id).eq("is_read", false);
+  await sb.from("notifications").update({ is_read: true }).eq("user_id", state.user.id).eq("is_read", false);
   await loadNotifications(); renderNotifications();
 };
 
@@ -716,7 +716,7 @@ async function renderMessages() {
     return;
   }
   $("msgNote").textContent = "";
-  const { data } = await supabase.from("conversations").select("*").order("created_at", { ascending: false }).limit(30);
+  const { data } = await sb.from("conversations").select("*").order("created_at", { ascending: false }).limit(30);
   const convs = data || [];
   $("convList").innerHTML = convs.length ? convs.map((c) => `<div class="card"><button class="btn small" onclick="openConv('${c.id}')">${esc(c.title || ("#" + String(c.id).slice(0, 8)))}</button></div>`).join("") : `<p class="muted">${LANG === "ar" ? "لا توجد محادثات بعد." : "No conversations yet."}</p>`;
   if (state.profile.role === "representative") {
@@ -726,13 +726,13 @@ async function renderMessages() {
 }
 window.openConv = async (id) => {
   state.conv = id;
-  const { data } = await supabase.from("messages").select("*").eq("conversation_id", id).order("created_at");
+  const { data } = await sb.from("messages").select("*").eq("conversation_id", id).order("created_at");
   state.convMsgs = data || [];
   $("convTitle").textContent = "#" + String(id).slice(0, 8);
   $("msgThread").innerHTML = state.convMsgs.map((m) => `<div class="msg-bubble ${m.sender_id === state.user.id ? "me" : ""}"><div>${esc(m.body)}</div><div class="meta">${esc(m.created_at || "")}</div></div>`).join("") || `<p class="muted">${LANG === "ar" ? "لا توجد رسائل بعد." : "No messages yet."}</p>`;
 };
 window.startConv = async (doctorId) => {
-  const { data, error } = await supabase.from("conversations").insert({ doctor_id: doctorId, representative_id: state.user.id, batch_id: state.batch ? state.batch.id : null, title: "rep-doctor" }).select().single();
+  const { data, error } = await sb.from("conversations").insert({ doctor_id: doctorId, representative_id: state.user.id, batch_id: state.batch ? state.batch.id : null, title: "rep-doctor" }).select().single();
   if (error) return alert(error.message);
   await renderMessages(); openConv(data.id);
 };
@@ -740,7 +740,7 @@ $("msgForm").onsubmit = async (e) => {
   e.preventDefault();
   if (!state.conv) return alert(LANG === "ar" ? "اختر محادثة أولاً." : "Choose a conversation first.");
   const body = $("msgText").value.trim(); if (!body) return;
-  const { error } = await supabase.from("messages").insert({ conversation_id: state.conv, sender_id: state.user.id, body, kind: "text" });
+  const { error } = await sb.from("messages").insert({ conversation_id: state.conv, sender_id: state.user.id, body, kind: "text" });
   if (error) return alert(error.message);
   $("msgText").value = "";
   await openConv(state.conv);
@@ -803,7 +803,7 @@ $("aiClear").onclick = () => { aiSave([]); renderAssistant(); };
 /* ---------- Users & access requests (admin) ---------- */
 async function renderUsers() {
   if (!canManage()) return;
-  const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(100);
+  const { data } = await sb.from("profiles").select("*").order("created_at", { ascending: false }).limit(100);
   const users = data || [];
   const pending = users.filter((u) => u.role === "student" && !u.batch_id && !u.group_id);
   $("pendingList").innerHTML = pending.length ? pending.map((u) => `
@@ -821,28 +821,28 @@ window.approveUser = async (id) => {
   if (!role) return;
   const gnum = prompt(LANG === "ar" ? "رقم المجموعة (1-19) أو اتركه فارغاً:" : "Group number (1-19) or leave empty:", "");
   const g = gnum ? state.groups.find((x) => x.number === parseInt(gnum, 10)) : null;
-  const { error } = await supabase.from("profiles").update({ role, batch_id: state.batch ? state.batch.id : null, group_id: g ? g.id : null, is_active: true }).eq("id", id);
+  const { error } = await sb.from("profiles").update({ role, batch_id: state.batch ? state.batch.id : null, group_id: g ? g.id : null, is_active: true }).eq("id", id);
   if (error) return alert(error.message);
   alert(LANG === "ar" ? "تم القبول وتفعيل الحساب." : "Approved and activated.");
   renderUsers();
 };
 window.rejectUser = async (id) => {
   if (!confirm(LANG === "ar" ? "رفض هذا الطلب وتعطيل الحساب؟" : "Reject this request and deactivate the account?")) return;
-  const { error } = await supabase.from("profiles").update({ is_active: false }).eq("id", id);
+  const { error } = await sb.from("profiles").update({ is_active: false }).eq("id", id);
   if (error) return alert(error.message);
   renderUsers();
 };
 window.editUser = async (id) => {
   const role = prompt(LANG === "ar" ? "الدور الجديد (super_admin / admin / doctor / representative / student):" : "New role:", "student");
   if (!role) return;
-  const { error } = await supabase.from("profiles").update({ role }).eq("id", id);
+  const { error } = await sb.from("profiles").update({ role }).eq("id", id);
   if (error) return alert(error.message);
   renderUsers();
 };
 
 /* ---------- Settings ---------- */
 async function renderSettings() {
-  const { data, error } = await supabase.from("batches").select("id").limit(1);
+  const { data, error } = await sb.from("batches").select("id").limit(1);
   const ok = !error;
   $("connStatus").innerHTML = ok
     ? `<p class="msg ok">${LANG === "ar" ? "متصل بـ Supabase — الدفعات: " : "Connected to Supabase — batches: "}${data ? data.length : 0} — ${CFG.SUPABASE_URL}</p>
@@ -871,7 +871,7 @@ $("saveUrls").onclick = () => {
   applyLang();
   const savedLogo = localStorage.getItem("tm_logo");
   if (savedLogo) $("logoImg").src = savedLogo;
-  const { data } = supabase ? await supabase.auth.getSession() : { data: null };
+  const { data } = sb ? await sb.auth.getSession() : { data: null };
   if (data && data.session && data.session.user) await afterAuth(data.session.user);
   else show("view-login");
 })();
